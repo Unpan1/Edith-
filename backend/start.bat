@@ -1,0 +1,15 @@
+@echo off
+REM Arranque rápido del backend (Windows)
+cd /d "%~dp0"
+if not exist .venv (
+  echo Creando entorno virtual...
+  python -m venv .venv
+)
+call .venv\Scripts\activate.bat
+pip install -r requirements.txt
+echo.
+echo Asegurate de tener MySQL corriendo y la DB 'clipai' creada.
+echo Edita .env si es necesario.
+echo.
+python -m scripts.create_db
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000

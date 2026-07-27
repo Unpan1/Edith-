@@ -1,0 +1,12 @@
+# ClipAI root
+backend/.venv/
+backend/uploads/
+backend/outputs/
+backend/temp/
+backend/__pycache__/
+**/.env
+**/node_modules/
+**/dist/
+**/*.pyc
+.DS_Store
+Thumbs.db

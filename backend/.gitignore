@@ -1,0 +1,12 @@
+uploads/
+outputs/
+temp/
+__pycache__/
+*.py[cod]
+.env
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+*.log
