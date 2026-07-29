@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.ai.text_cleanup import ES_INITIAL_PROMPT, cleanup_transcript_text
 from app.config.settings import Settings
 from app.utils.exceptions import WhisperNotAvailableError
 from app.utils.logger import get_logger
@@ -75,24 +76,49 @@ class WhisperService:
         except Exception as exc:  # noqa: BLE001
             raise WhisperNotAvailableError(f"No se pudo cargar Whisper: {exc}") from exc
 
-    def transcribe(self, audio_path: str | Path, language: Optional[str] = None) -> TranscriptionResult:
+    def transcribe(
+        self,
+        audio_path: str | Path,
+        language: Optional[str] = None,
+        *,
+        high_quality: bool = False,
+    ) -> TranscriptionResult:
         """Transcribe audio y retorna texto + segmentos con timestamps."""
         path = Path(audio_path)
         if not path.exists():
             raise WhisperNotAvailableError(f"Audio no encontrado: {path}")
 
         model = self._load_model()
-        logger.info("Iniciando transcripción Whisper: %s", path)
+        logger.info(
+            "Iniciando transcripción Whisper: %s (hq=%s)",
+            path,
+            high_quality,
+        )
         start = time.perf_counter()
 
+        # Opciones orientadas a menos confusiones / mejor puntuación
         options: Dict[str, Any] = {
             "task": "transcribe",
             "verbose": False,
             "word_timestamps": True,
             "condition_on_previous_text": True,
+            "temperature": 0.0 if not high_quality else (0.0, 0.2, 0.4),
+            "compression_ratio_threshold": 2.4,
+            "logprob_threshold": -1.0,
+            "no_speech_threshold": 0.6,
         }
+        if high_quality:
+            options["beam_size"] = 5
+            options["best_of"] = 5
+            options["patience"] = 1.0
+
         if language:
             options["language"] = language
+            if language.lower().startswith("es"):
+                options["initial_prompt"] = ES_INITIAL_PROMPT
+        else:
+            # Sin idioma: aún así ayudar si el audio suena español (Whisper detecta)
+            options["initial_prompt"] = ES_INITIAL_PROMPT
 
         try:
             result = model.transcribe(str(path), **options)
@@ -100,12 +126,14 @@ class WhisperService:
             raise WhisperNotAvailableError(f"Error durante la transcripción: {exc}") from exc
 
         elapsed = time.perf_counter() - start
+        lang = str(result.get("language") or language or "unknown")
+
         segments = [
             WhisperSegment(
                 id=int(seg.get("id", idx)),
                 start=float(seg.get("start", 0)),
                 end=float(seg.get("end", 0)),
-                text=str(seg.get("text", "")).strip(),
+                text=cleanup_transcript_text(str(seg.get("text", "")).strip(), lang),
                 avg_logprob=float(seg.get("avg_logprob") or 0.0),
                 no_speech_prob=float(seg.get("no_speech_prob") or 0.0),
                 words=list(seg.get("words") or []),
@@ -114,8 +142,21 @@ class WhisperService:
             if str(seg.get("text", "")).strip()
         ]
 
-        text = str(result.get("text") or "").strip()
-        lang = str(result.get("language") or language or "unknown")
+        # Filtrar segmentos muy poco confiables (ruido / alucinaciones)
+        if high_quality and segments:
+            filtered = [
+                s
+                for s in segments
+                if s.no_speech_prob < 0.85 and (s.avg_logprob > -1.35 or len(s.text) > 12)
+            ]
+            if filtered:
+                segments = filtered
+
+        text = cleanup_transcript_text(
+            " ".join(s.text for s in segments).strip()
+            or str(result.get("text") or "").strip(),
+            lang,
+        )
         logger.info(
             "Transcripción completada en %.2fs | idioma=%s | segmentos=%d | chars=%d",
             elapsed,

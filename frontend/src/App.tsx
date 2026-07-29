@@ -9,12 +9,17 @@ import { ClipWorkspacePage } from './pages/ClipWorkspacePage'
 import { ComposePage } from './pages/ComposePage'
 import { CreditsPage } from './pages/CreditsPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { ExtractPage } from './pages/ExtractPage'
 import { GrowthPage } from './pages/GrowthPage'
 import { HomePage } from './pages/HomePage'
 import { LearningPage } from './pages/LearningPage'
 import { LibraryPage } from './pages/LibraryPage'
 import { PublishingPage } from './pages/PublishingPage'
 import { TrendsPage } from './pages/TrendsPage'
+import { VoicesPage } from './pages/VoicesPage'
+import { StoriesPage } from './pages/StoriesPage'
+import { ConvertPage } from './pages/ConvertPage'
+import { BasicEditPage } from './pages/BasicEditPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,6 +41,11 @@ export default function App() {
             <Route path="dashboard" element={<Navigate to="/" replace />} />
             <Route path="studio" element={<HomePage />} />
             <Route path="compose" element={<ComposePage />} />
+            <Route path="voices" element={<VoicesPage />} />
+            <Route path="stories" element={<StoriesPage />} />
+            <Route path="extract" element={<ExtractPage />} />
+            <Route path="convert" element={<ConvertPage />} />
+            <Route path="edit" element={<BasicEditPage />} />
             <Route path="library" element={<LibraryPage />} />
             <Route path="library/clips/:id" element={<ClipWorkspacePage />} />
             <Route path="trends" element={<TrendsPage />} />

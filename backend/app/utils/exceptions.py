@@ -58,6 +58,11 @@ class ProcessingError(AppError):
         super().__init__(message, status_code=500)
 
 
+class JobCancelledError(AppError):
+    def __init__(self, message: str = "Generación cancelada"):
+        super().__init__(message, status_code=499)
+
+
 class DatabaseError(AppError):
     def __init__(self, message: str = "Error de base de datos MySQL"):
         super().__init__(message, status_code=500)

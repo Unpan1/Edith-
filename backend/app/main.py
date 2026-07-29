@@ -153,6 +153,21 @@ def create_app() -> FastAPI:
     from app.routes.compose import router as compose_router
     app.include_router(compose_router)
 
+    from app.routes.voices import router as voices_router
+    app.include_router(voices_router)
+
+    from app.routes.extract import router as extract_router
+    app.include_router(extract_router)
+
+    from app.routes.stories import router as stories_router
+    app.include_router(stories_router)
+
+    from app.routes.convert import router as convert_router
+    app.include_router(convert_router)
+
+    from app.routes.basic_edit import router as basic_edit_router
+    app.include_router(basic_edit_router)
+
     # Segunda capa SaaS
     from app.modules.dashboard.routes import router as dashboard_router
     from app.modules.library.routes import router as library_router
