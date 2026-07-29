@@ -150,6 +150,9 @@ def create_app() -> FastAPI:
 
     app.include_router(videos_router)
 
+    from app.routes.compose import router as compose_router
+    app.include_router(compose_router)
+
     # Segunda capa SaaS
     from app.modules.dashboard.routes import router as dashboard_router
     from app.modules.library.routes import router as library_router

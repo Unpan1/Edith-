@@ -6,6 +6,7 @@ import { AnalyticsPage } from './pages/AnalyticsPage'
 import { AutomationPage } from './pages/AutomationPage'
 import { CalendarPage } from './pages/CalendarPage'
 import { ClipWorkspacePage } from './pages/ClipWorkspacePage'
+import { ComposePage } from './pages/ComposePage'
 import { CreditsPage } from './pages/CreditsPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { GrowthPage } from './pages/GrowthPage'
@@ -34,6 +35,7 @@ export default function App() {
             <Route index element={<DashboardPage />} />
             <Route path="dashboard" element={<Navigate to="/" replace />} />
             <Route path="studio" element={<HomePage />} />
+            <Route path="compose" element={<ComposePage />} />
             <Route path="library" element={<LibraryPage />} />
             <Route path="library/clips/:id" element={<ClipWorkspacePage />} />
             <Route path="trends" element={<TrendsPage />} />

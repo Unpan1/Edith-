@@ -6,6 +6,7 @@ import { getCreditsBalance } from '../api/saas'
 const NAV = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/studio', label: 'Studio' },
+  { to: '/compose', label: 'Composición' },
   { to: '/library', label: 'Biblioteca' },
   { to: '/trends', label: 'Tendencias' },
   { to: '/calendar', label: 'Calendario' },
