@@ -15,6 +15,34 @@ export interface EditAsset {
 }
 
 export type AudioMode = 'mix' | 'replace' | 'keep'
+export type TimelineClipKind = 'video' | 'image' | 'audio' | 'title'
+
+export interface TimelineClipPayload {
+  id: string
+  kind: TimelineClipKind
+  asset_id?: string | null
+  track: string
+  start: number
+  duration: number
+  source_offset?: number
+  volume?: number
+  text?: string | null
+  font_family?: string
+  font_size?: number
+  color?: string
+  x_percent?: number
+  y_percent?: number
+}
+
+export type ExportFormat = 'mp4' | 'webm' | 'mov' | 'mkv' | 'gif' | 'mp3' | 'wav'
+
+export interface TimelineRenderBody {
+  clips: TimelineClipPayload[]
+  width?: number
+  height?: number
+  mirror?: boolean
+  export_format?: ExportFormat
+}
 
 export interface EditRenderBody {
   video_ids: string[]
@@ -47,14 +75,14 @@ export interface EditJobStatus {
 
 export async function uploadEditAsset(
   file: File,
-  kind: 'auto' | 'video' | 'audio' = 'auto',
+  kind: 'auto' | 'video' | 'audio' | 'image' = 'auto',
   onProgress?: (pct: number) => void,
 ): Promise<EditAsset> {
   const form = new FormData()
   form.append('file', file)
   form.append('kind', kind)
   const { data } = await api.post<EditAsset>('/edit/upload', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    // No fijar Content-Type: el navegador añade el boundary de multipart
     timeout: 600_000,
     onUploadProgress: (e) => {
       if (e.total && onProgress) onProgress(Math.round((e.loaded / e.total) * 100))
@@ -63,8 +91,35 @@ export async function uploadEditAsset(
   return data
 }
 
+export async function listEditAssets(): Promise<EditAsset[]> {
+  const { data } = await api.get<EditAsset[]>('/edit/assets')
+  return data
+}
+
+export function extractErrorDetail(err: unknown): string {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })?.response
+    ?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d) => (typeof d === 'object' && d && 'msg' in d ? String(d.msg) : String(d)))
+      .join('; ')
+  }
+  if (err instanceof Error) return err.message
+  return 'Error desconocido'
+}
+
 export async function startEditRender(body: EditRenderBody): Promise<EditJobStart> {
   const { data } = await api.post<EditJobStart>('/edit/render', body, {
+    timeout: 30_000,
+  })
+  return data
+}
+
+export async function startTimelineRender(
+  body: TimelineRenderBody,
+): Promise<EditJobStart> {
+  const { data } = await api.post<EditJobStart>('/edit/timeline/render', body, {
     timeout: 30_000,
   })
   return data

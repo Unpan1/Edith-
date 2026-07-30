@@ -11,7 +11,7 @@ const NAV = [
   { to: '/stories', label: 'Historias' },
   { to: '/extract', label: 'Extraer texto' },
   { to: '/convert', label: 'YouTube MP4/MP3' },
-  { to: '/edit', label: 'Editor básico' },
+  { to: '/edit', label: 'Editor' },
   { to: '/library', label: 'Biblioteca' },
   { to: '/trends', label: 'Tendencias' },
   { to: '/calendar', label: 'Calendario' },

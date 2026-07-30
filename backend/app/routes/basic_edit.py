@@ -1,4 +1,4 @@
-"""Rutas: editor de video básico."""
+"""Rutas: editor de video con timeline."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from app.schemas.basic_edit import (
     EditJobStart,
     EditJobStatus,
     EditRenderRequest,
+    TimelineRenderRequest,
 )
 from app.services.basic_edit_service import BasicEditService
 from app.services.progress_jobs import progress_jobs
@@ -70,11 +71,26 @@ def stream_edit_asset(
     service: BasicEditService = Depends(get_edit_service),
 ):
     asset = service.get_asset(asset_id)
-    media = "audio/mpeg" if asset.kind == "audio" else "video/mp4"
-    if asset.path.suffix.lower() == ".wav":
-        media = "audio/wav"
-    elif asset.path.suffix.lower() in (".m4a", ".aac"):
-        media = "audio/mp4"
+    ext = asset.path.suffix.lower()
+    if asset.kind == "audio":
+        media = "audio/mpeg"
+        if ext == ".wav":
+            media = "audio/wav"
+        elif ext in (".m4a", ".aac"):
+            media = "audio/mp4"
+        elif ext == ".ogg":
+            media = "audio/ogg"
+    elif asset.kind == "image":
+        media = {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+            ".gif": "image/gif",
+            ".bmp": "image/bmp",
+        }.get(ext, "image/jpeg")
+    else:
+        media = "video/mp4"
     return FileResponse(asset.path, media_type=media)
 
 
@@ -87,7 +103,6 @@ def _run_render(job_id: str, payload: dict) -> None:
         progress_jobs.update(
             job_id, status="running", progress=2, detail="Preparando edición…"
         )
-        body = EditRenderRequest.model_validate(payload)
         service = BasicEditService(get_settings())
 
         def on_progress(pct: int, detail: str, eta: Optional[int]) -> None:
@@ -102,18 +117,31 @@ def _run_render(job_id: str, payload: dict) -> None:
                 clear_eta=eta is None,
             )
 
-        result = service.render(
-            video_ids=body.video_ids,
-            audio_id=body.audio_id,
-            start=body.start,
-            end=body.end,
-            mirror=body.mirror,
-            video_volume=body.video_volume,
-            audio_volume=body.audio_volume,
-            audio_mode=body.audio_mode,
-            on_progress=on_progress,
-            should_cancel=lambda: progress_jobs.is_cancelled(job_id),
-        )
+        if payload.get("clips") is not None:
+            body = TimelineRenderRequest.model_validate(payload)
+            result = service.render_timeline(
+                clips=body.clips,
+                width=body.width,
+                height=body.height,
+                mirror=body.mirror,
+                export_format=body.export_format,
+                on_progress=on_progress,
+                should_cancel=lambda: progress_jobs.is_cancelled(job_id),
+            )
+        else:
+            body = EditRenderRequest.model_validate(payload)
+            result = service.render(
+                video_ids=body.video_ids,
+                audio_id=body.audio_id,
+                start=body.start,
+                end=body.end,
+                mirror=body.mirror,
+                video_volume=body.video_volume,
+                audio_volume=body.audio_volume,
+                audio_mode=body.audio_mode,
+                on_progress=on_progress,
+                should_cancel=lambda: progress_jobs.is_cancelled(job_id),
+            )
         if progress_jobs.is_cancelled(job_id):
             return
         progress_jobs.update(
@@ -157,6 +185,18 @@ def start_edit_render(body: EditRenderRequest):
         args=(job.id, body.model_dump(mode="json")),
         daemon=True,
         name=f"edit-{job.id[:8]}",
+    ).start()
+    return EditJobStart(job_id=job.id)
+
+
+@router.post("/timeline/render", response_model=EditJobStart, status_code=202)
+def start_timeline_render(body: TimelineRenderRequest):
+    job = progress_jobs.create("edit", detail="En cola…", clips=len(body.clips))
+    threading.Thread(
+        target=_run_render,
+        args=(job.id, body.model_dump(mode="json")),
+        daemon=True,
+        name=f"edit-tl-{job.id[:8]}",
     ).start()
     return EditJobStart(job_id=job.id)
 
@@ -207,6 +247,16 @@ def stream_edit_file(
     service: BasicEditService = Depends(get_edit_service),
 ):
     path = service.resolve_output(filename)
+    ext = path.suffix.lower()
+    media = {
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
+        ".mov": "video/quicktime",
+        ".mkv": "video/x-matroska",
+        ".gif": "image/gif",
+        ".mp3": "audio/mpeg",
+        ".wav": "audio/wav",
+    }.get(ext, "application/octet-stream")
     headers = {}
     if download:
         ascii_name = path.name
@@ -214,4 +264,4 @@ def stream_edit_file(
             f'attachment; filename="{ascii_name}"; '
             f"filename*=UTF-8''{quote(ascii_name)}"
         )
-    return FileResponse(path, media_type="video/mp4", headers=headers)
+    return FileResponse(path, media_type=media, headers=headers)
