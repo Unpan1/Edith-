@@ -1,4 +1,4 @@
-"""Extracción de texto de YouTube (subtítulos yt-dlp o Whisper local)."""
+"""Extracción de texto de YouTube / Instagram / Facebook (subtítulos o Whisper)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from app.ai.text_cleanup import cleanup_transcript_text
 from app.config.settings import Settings
 from app.utils.exceptions import AppError
 from app.utils.logger import get_logger
-from app.video.youtube_service import YoutubeService
+from app.video.youtube_service import YoutubeService, yt_dlp_base_opts
 
 logger = get_logger(__name__)
 
@@ -38,6 +38,7 @@ class YoutubeTranscriptResult:
     cues: List[TranscriptCue] = field(default_factory=list)
     duration: Optional[float] = None
     speakers_count: int = 1
+    platform: str = "youtube"
 
 
 def _strip_vtt(content: str) -> List[TranscriptCue]:
@@ -133,14 +134,23 @@ class YoutubeTranscriptService:
         detect_speakers: bool = True,
         on_progress: Optional[ProgressCb] = None,
     ) -> YoutubeTranscriptResult:
-        clean = self.youtube.normalize_url(url)
-        if on_progress:
-            on_progress(5, "Obteniendo información del video…", None)
+        clean, platform = self.youtube.normalize_media_url(url)
+        label = {
+            "youtube": "YouTube",
+            "instagram": "Instagram",
+            "facebook": "Facebook",
+        }.get(platform, platform)
 
-        if not prefer_whisper:
+        if on_progress:
+            on_progress(5, f"Obteniendo información de {label}…", None)
+
+        # Instagram / Facebook no suelen traer subtítulos útiles → Whisper
+        use_captions = platform == "youtube" and not prefer_whisper
+        if use_captions:
             try:
                 result = self._from_captions(clean, language=language, on_progress=on_progress)
                 if result and result.text.strip():
+                    result.platform = platform
                     if detect_speakers:
                         result = self._attach_speakers_from_audio(
                             clean, result, on_progress=on_progress
@@ -150,13 +160,20 @@ class YoutubeTranscriptService:
                 logger.warning("Subtítulos YouTube no disponibles: %s", exc)
 
         if on_progress:
-            on_progress(25, "Sin subtítulos útiles. Descargando audio para Whisper…", None)
-        return self._from_whisper(
+            if platform == "youtube":
+                on_progress(25, "Sin subtítulos útiles. Descargando audio para Whisper…", None)
+            else:
+                on_progress(25, f"Descargando audio de {label} para transcribir…", None)
+
+        result = self._from_whisper(
             clean,
             language=language,
             detect_speakers=detect_speakers,
             on_progress=on_progress,
+            platform=platform,
         )
+        result.platform = platform
+        return result
 
     def _from_captions(
         self,
@@ -182,14 +199,13 @@ class YoutubeTranscriptService:
         lang_list = [x for x in langs if not (x in seen or seen.add(x))]
 
         ydl_opts = {
+            **yt_dlp_base_opts(platform="youtube"),
             "skip_download": True,
             "writesubtitles": True,
             "writeautomaticsub": True,
             "subtitleslangs": lang_list,
             "subtitlesformat": "vtt",
             "outtmpl": str(job_dir / "%(id)s.%(ext)s"),
-            "quiet": True,
-            "no_warnings": True,
         }
 
         if on_progress:
@@ -280,6 +296,7 @@ class YoutubeTranscriptService:
         language: Optional[str],
         detect_speakers: bool = True,
         on_progress: Optional[ProgressCb],
+        platform: str = "youtube",
     ) -> YoutubeTranscriptResult:
         try:
             import yt_dlp  # type: ignore
@@ -292,16 +309,20 @@ class YoutubeTranscriptService:
                 status_code=500,
             )
 
+        label = {
+            "youtube": "YouTube",
+            "instagram": "Instagram",
+            "facebook": "Facebook",
+        }.get(platform, platform)
+
         job_dir = self.work_dir / uuid.uuid4().hex
         job_dir.mkdir(parents=True, exist_ok=True)
         outtmpl = str(job_dir / "%(id)s.%(ext)s")
 
         ydl_opts = {
+            **yt_dlp_base_opts(platform=platform),
             "format": "bestaudio/best",
             "outtmpl": outtmpl,
-            "noplaylist": True,
-            "quiet": True,
-            "no_warnings": True,
             "postprocessors": [
                 {
                     "key": "FFmpegExtractAudio",
@@ -315,20 +336,35 @@ class YoutubeTranscriptService:
             ydl_opts["ffmpeg_location"] = str(ffmpeg_parent)
 
         if on_progress:
-            on_progress(35, "Descargando audio…", None)
+            on_progress(35, f"Descargando audio de {label}…", None)
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            if not info:
-                raise AppError("No se pudo obtener el video de YouTube")
-            if "entries" in info and info["entries"]:
-                info = info["entries"][0]
-            title = (info.get("title") or "YouTube").strip()
-            duration = info.get("duration")
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                if not info:
+                    raise AppError(f"No se pudo obtener el video de {label}")
+                if "entries" in info and info["entries"]:
+                    info = info["entries"][0]
+                title = (info.get("title") or info.get("id") or label).strip()
+                duration = info.get("duration")
+        except AppError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            msg = str(exc).lower()
+            logger.exception("Error audio yt-dlp (%s): %s", label, exc)
+            if "private" in msg:
+                raise AppError(f"El video de {label} es privado o no accesible") from exc
+            if "login" in msg or "sign in" in msg or "cookie" in msg:
+                raise AppError(
+                    f"{label} pidió inicio de sesión. Usa un Reel/video público."
+                ) from exc
+            if "unavailable" in msg or "not available" in msg:
+                raise AppError(f"El video de {label} no está disponible") from exc
+            raise AppError(f"No se pudo descargar audio de {label}: {exc}") from exc
 
         audio_files = list(job_dir.glob("*.wav")) + list(job_dir.glob("*.m4a")) + list(job_dir.glob("*.webm"))
         if not audio_files:
-            raise AppError("No se pudo descargar el audio del video")
+            raise AppError(f"No se pudo descargar el audio de {label}")
         audio_path = audio_files[0]
 
         if audio_path.suffix.lower() != ".wav" and self.ffmpeg:
@@ -391,6 +427,7 @@ class YoutubeTranscriptService:
             cues=cues,
             duration=float(duration) if duration else None,
             speakers_count=speakers_count,
+            platform=platform,
         )
 
     def _attach_speakers_from_audio(
@@ -415,11 +452,9 @@ class YoutubeTranscriptService:
         job_dir.mkdir(parents=True, exist_ok=True)
         try:
             ydl_opts = {
+                **yt_dlp_base_opts(platform="youtube"),
                 "format": "bestaudio/best",
                 "outtmpl": str(job_dir / "%(id)s.%(ext)s"),
-                "noplaylist": True,
-                "quiet": True,
-                "no_warnings": True,
                 "postprocessors": [
                     {
                         "key": "FFmpegExtractAudio",

@@ -27,6 +27,7 @@ export interface ConvertJobStatus {
   title?: string | null
   duration?: number | null
   format?: string | null
+  platform?: string | null
   files: ConvertFile[]
 }
 

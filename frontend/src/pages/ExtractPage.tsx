@@ -72,7 +72,7 @@ export function ExtractPage() {
     const blob = new Blob([result.text], { type: 'text/plain;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `${(result.title || 'youtube').slice(0, 60)}.txt`
+    a.download = `${(result.title || 'transcripcion').slice(0, 60)}.txt`
     a.click()
     URL.revokeObjectURL(a.href)
   }
@@ -91,23 +91,26 @@ export function ExtractPage() {
           Función externa · Gratis
         </p>
         <h1 className="font-display mt-1 text-2xl text-white sm:text-3xl">
-          Extraer texto de YouTube
+          Extraer texto / transcribir
         </h1>
         <p className="mt-2 max-w-xl text-sm text-slate-400">
-          Pega un link y obtén el texto. Mejora de comprensión con Whisper y detección de
-          hablantes distintos (local, sin APIs de pago).
+          Pega un link de YouTube, Instagram (Reels) o Facebook y obtén el texto del
+          audio. YouTube puede usar subtítulos; Reels se transcriben con Whisper local
+          (gratis). El contenido debe ser público.
         </p>
       </div>
 
       <section className="space-y-4 rounded-2xl border border-white/8 bg-white/[0.03] p-4 sm:p-5">
         <label className="block space-y-1.5">
-          <span className="text-xs text-slate-500">Link de YouTube</span>
+          <span className="text-xs text-slate-500">
+            Link (YouTube / Instagram / Facebook)
+          </span>
           <input
             type="url"
             value={url}
             disabled={busy}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://www.youtube.com/watch?v=… o youtu.be/…"
+            placeholder="youtube.com/… · instagram.com/reel/… · facebook.com/reel/…"
             className="w-full rounded-lg border border-white/10 bg-[#12151e] px-3 py-2.5 text-sm text-white placeholder:text-slate-600"
           />
         </label>
@@ -148,7 +151,7 @@ export function ExtractPage() {
               onChange={(e) => setPreferWhisper(e.target.checked)}
               className="accent-sky-400"
             />
-            Forzar Whisper (más preciso, más lento)
+            Forzar Whisper en YouTube (Reels ya usan Whisper)
           </label>
         </div>
 
@@ -179,6 +182,9 @@ export function ExtractPage() {
             <div>
               <h2 className="text-base font-medium text-white">{result.title}</h2>
               <p className="mt-1 text-xs text-slate-500">
+                {result.platform ? (
+                  <span className="mr-2 capitalize text-sky-200/80">{result.platform}</span>
+                ) : null}
                 {SOURCE_LABELS[result.source] || result.source}
                 {result.language ? ` · idioma ${result.language}` : ''}
                 {result.duration != null ? ` · ${formatDuration(result.duration)}` : ''}

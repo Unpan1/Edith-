@@ -13,7 +13,12 @@ class TranscriptCueRead(BaseModel):
 
 
 class YoutubeTranscriptRequest(BaseModel):
-    url: str = Field(..., min_length=10, max_length=500)
+    url: str = Field(
+        ...,
+        min_length=10,
+        max_length=800,
+        description="URL de YouTube, Instagram Reel o Facebook Reel/video",
+    )
     language: Optional[str] = Field(default="es", max_length=10)
     prefer_whisper: bool = False
     detect_speakers: bool = True
@@ -32,6 +37,7 @@ class YoutubeTranscriptResultRead(BaseModel):
     text: str
     duration: Optional[float] = None
     speakers_count: int = 1
+    platform: Optional[str] = None
     cues: List[TranscriptCueRead] = Field(default_factory=list)
 
 

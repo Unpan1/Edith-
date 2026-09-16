@@ -10,7 +10,7 @@ const NAV = [
   { to: '/voices', label: 'Voces' },
   { to: '/stories', label: 'Historias' },
   { to: '/extract', label: 'Extraer texto' },
-  { to: '/convert', label: 'YouTube MP4/MP3' },
+  { to: '/convert', label: 'Descargar / Reels' },
   { to: '/edit', label: 'Editor' },
   { to: '/library', label: 'Biblioteca' },
   { to: '/trends', label: 'Tendencias' },

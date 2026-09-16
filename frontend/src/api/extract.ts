@@ -15,6 +15,7 @@ export interface YoutubeTranscriptResult {
   text: string
   duration: number | null
   speakers_count: number
+  platform?: string | null
   cues: TranscriptCue[]
 }
 

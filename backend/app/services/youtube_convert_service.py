@@ -13,7 +13,7 @@ from typing import Callable, List, Optional
 from app.config.settings import Settings
 from app.utils.exceptions import AppError, InvalidFileError, JobCancelledError
 from app.utils.logger import get_logger
-from app.video.youtube_service import YoutubeService
+from app.video.youtube_service import YoutubeService, yt_dlp_base_opts
 
 logger = get_logger(__name__)
 
@@ -35,6 +35,7 @@ class YoutubeConvertResult:
     title: str
     duration: Optional[float]
     format: str
+    platform: str = "youtube"
     files: List[ConvertedFile] = field(default_factory=list)
 
 
@@ -66,15 +67,20 @@ class YoutubeConvertService:
             if on_progress:
                 on_progress(pct, detail, eta)
 
-        clean = self.youtube.normalize_url(url)
+        clean, platform = self.youtube.normalize_media_url(url)
         work = self.out_dir / f"_work_{uuid.uuid4().hex}"
         work.mkdir(parents=True, exist_ok=True)
         files: List[ConvertedFile] = []
+        platform_label = {
+            "youtube": "YouTube",
+            "instagram": "Instagram",
+            "facebook": "Facebook",
+        }.get(platform, platform)
 
         try:
             check()
             if fmt in ("mp4", "both"):
-                prog(5, "Descargando video (MP4)…")
+                prog(5, f"Descargando video de {platform_label} (MP4)…")
 
                 def mp4_progress(pct: int, detail: str, eta: Optional[int]) -> None:
                     # Mapear 0–100 de yt-dlp a 5–70
@@ -82,12 +88,16 @@ class YoutubeConvertService:
                     prog(mapped, detail, eta)
 
                 dl = self.youtube.download(
-                    clean, work, on_progress=mp4_progress
+                    clean,
+                    work,
+                    on_progress=mp4_progress,
+                    skip_normalize=True,
+                    platform=platform,
                 )
                 check()
                 token = uuid.uuid4().hex
                 safe = self._safe_stem(dl.title)
-                mp4_name = f"yt_{token}.mp4"
+                mp4_name = f"dl_{token}.mp4"
                 mp4_path = self.out_dir / mp4_name
                 shutil.move(str(dl.path), str(mp4_path))
                 files.append(
@@ -105,7 +115,7 @@ class YoutubeConvertService:
                 if fmt == "both":
                     prog(75, "Extrayendo audio MP3…", 10)
                     check()
-                    mp3_name = f"yt_{token}.mp3"
+                    mp3_name = f"dl_{token}.mp3"
                     mp3_path = self.out_dir / mp3_name
                     self._extract_mp3(mp4_path, mp3_path)
                     files.append(
@@ -119,19 +129,19 @@ class YoutubeConvertService:
                     )
             else:
                 # Solo MP3
-                prog(5, "Descargando audio…")
+                prog(5, f"Descargando audio de {platform_label}…")
 
                 def audio_progress(pct: int, detail: str, eta: Optional[int]) -> None:
                     mapped = 5 + int(pct * 0.8)
                     prog(mapped, detail, eta)
 
                 audio = self._download_audio_mp3(
-                    clean, work, on_progress=audio_progress
+                    clean, work, on_progress=audio_progress, platform=platform
                 )
                 check()
                 token = uuid.uuid4().hex
                 safe = self._safe_stem(audio["title"])
-                mp3_name = f"yt_{token}.mp3"
+                mp3_name = f"dl_{token}.mp3"
                 mp3_path = self.out_dir / mp3_name
                 shutil.move(str(audio["path"]), str(mp3_path))
                 files.append(
@@ -149,7 +159,8 @@ class YoutubeConvertService:
             check()
             prog(100, "Conversión lista", None)
             logger.info(
-                "YouTube convert %s → %s (%d archivos)",
+                "%s convert %s → %s (%d archivos)",
+                platform_label,
                 fmt,
                 title,
                 len(files),
@@ -158,6 +169,7 @@ class YoutubeConvertService:
                 title=title,
                 duration=duration,
                 format=fmt,
+                platform=platform,
                 files=files,
             )
         finally:
@@ -167,7 +179,7 @@ class YoutubeConvertService:
         from urllib.parse import unquote
 
         safe = Path(unquote(filename or "")).name
-        if not re.match(r"^yt_[a-f0-9]+", safe, re.I):
+        if not re.match(r"^(yt|dl)_[a-f0-9]+", safe, re.I):
             raise AppError("Archivo inválido", status_code=400)
         if Path(safe).suffix.lower() not in (".mp4", ".mp3"):
             raise AppError("Archivo inválido", status_code=400)
@@ -178,7 +190,7 @@ class YoutubeConvertService:
             return path
 
         # Legacy: archivos con título/emoji en el nombre
-        m = re.match(r"^(yt_[a-f0-9]+)", safe, re.I)
+        m = re.match(r"^((?:yt|dl)_[a-f0-9]+)", safe, re.I)
         ext = Path(safe).suffix.lower()
         if m:
             for cand in sorted(self.out_dir.glob(f"{m.group(1)}*{ext}")):
@@ -190,9 +202,8 @@ class YoutubeConvertService:
     def _safe_stem(self, title: str) -> str:
         base = re.sub(r"\.mp4$", "", title or "", flags=re.I)
         base = re.sub(r"[^A-Za-z0-9._-]+", "_", base)
-        base = re.sub(r"_+", "_", base).strip("._") or "youtube"
+        base = re.sub(r"_+", "_", base).strip("._") or "video"
         return base[:80]
-
     def _ffmpeg(self) -> str:
         ffmpeg = self.settings.ffmpeg_path
         if shutil.which(ffmpeg) or Path(ffmpeg).exists():
@@ -227,6 +238,7 @@ class YoutubeConvertService:
         url: str,
         dest_dir: Path,
         on_progress: Optional[ProgressCb] = None,
+        platform: str = "youtube",
     ) -> dict:
         try:
             import yt_dlp  # type: ignore
@@ -264,12 +276,10 @@ class YoutubeConvertService:
                 on_progress(95, "Convirtiendo a MP3…", 5)
 
         ydl_opts = {
+            **yt_dlp_base_opts(platform=platform),
             "outtmpl": outtmpl,
             "format": "bestaudio/best",
-            "noplaylist": True,
-            "quiet": True,
-            "no_warnings": True,
-            "retries": 3,
+            "retries": 5,
             "progress_hooks": [_hook],
             "postprocessors": [
                 {

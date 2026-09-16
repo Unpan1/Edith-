@@ -19,6 +19,7 @@ export function ConvertPage() {
   const [files, setFiles] = useState<ConvertFile[]>([])
   const [title, setTitle] = useState<string | null>(null)
   const [duration, setDuration] = useState<number | null>(null)
+  const [platform, setPlatform] = useState<string | null>(null)
 
   const jobQuery = useQuery({
     queryKey: ['convert-job', jobId],
@@ -38,6 +39,7 @@ export function ConvertPage() {
       setFiles(job.files || [])
       setTitle(job.title || null)
       setDuration(job.duration ?? null)
+      setPlatform(job.platform || null)
       setJobId(null)
     } else if (job.status === 'failed') {
       setError(job.error || job.detail || 'Error al convertir')
@@ -59,8 +61,8 @@ export function ConvertPage() {
       setFiles([])
       setTitle(null)
       setDuration(null)
-    },
-    onSuccess: (res) => setJobId(res.job_id),
+      setPlatform(null)
+    },    onSuccess: (res) => setJobId(res.job_id),
     onError: (err) => {
       const detail =
         (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
@@ -95,23 +97,26 @@ export function ConvertPage() {
           Función separada · Gratis
         </p>
         <h1 className="font-display mt-1 text-2xl text-white sm:text-3xl">
-          YouTube → MP4 / MP3
+          Descargar → MP4 / MP3
         </h1>
         <p className="mt-2 max-w-xl text-sm text-slate-400">
-          Pega un link de YouTube y descárgalo como video (MP4), audio (MP3) o ambos.
-          Usa yt-dlp + FFmpeg, sin APIs de pago.
+          Pega un link de YouTube, Instagram (Reels) o Facebook (Reels/videos) y
+          descárgalo como video (MP4), solo audio (MP3) o ambos. Gratis con yt-dlp +
+          FFmpeg. El contenido debe ser público (sin login).
         </p>
       </div>
 
       <section className="space-y-4 rounded-2xl border border-white/8 bg-white/[0.03] p-4 sm:p-5">
         <label className="block space-y-1.5">
-          <span className="text-xs text-slate-500">Link de YouTube</span>
+          <span className="text-xs text-slate-500">
+            Link (YouTube / Instagram / Facebook)
+          </span>
           <input
             type="url"
             value={url}
             disabled={busy}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://www.youtube.com/watch?v=… o youtu.be/…"
+            placeholder="youtube.com/… · instagram.com/reel/… · facebook.com/reel/…"
             className="w-full rounded-lg border border-white/10 bg-[#12151e] px-3 py-2.5 text-sm text-white placeholder:text-slate-600"
           />
         </label>
@@ -122,8 +127,8 @@ export function ConvertPage() {
             {(
               [
                 ['both', 'MP4 + MP3'],
-                ['mp4', 'Solo MP4'],
-                ['mp3', 'Solo MP3'],
+                ['mp4', 'Solo MP4 (video)'],
+                ['mp3', 'Solo MP3 (audio)'],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -192,8 +197,11 @@ export function ConvertPage() {
         <section className="space-y-4 rounded-2xl border border-rose-500/25 bg-rose-500/5 p-4 sm:p-5">
           <div>
             <h2 className="text-sm font-medium text-rose-100">Listo para descargar</h2>
-            {(title || duration != null) && (
+            {(title || duration != null || platform) && (
               <p className="mt-1 text-xs text-slate-500">
+                {platform && (
+                  <span className="mr-2 capitalize text-rose-200/80">{platform}</span>
+                )}
                 {title}
                 {duration != null && ` · ${Math.round(duration)} s`}
               </p>

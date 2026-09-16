@@ -8,7 +8,12 @@ ConvertFormat = Literal["mp4", "mp3", "both"]
 
 
 class YoutubeConvertRequest(BaseModel):
-    url: str = Field(..., min_length=10, max_length=500)
+    url: str = Field(
+        ...,
+        min_length=10,
+        max_length=800,
+        description="URL de YouTube, Instagram Reel o Facebook Reel/video",
+    )
     format: ConvertFormat = Field(
         default="both",
         description="mp4 | mp3 | both",
@@ -38,4 +43,5 @@ class YoutubeConvertJobStatus(BaseModel):
     title: Optional[str] = None
     duration: Optional[float] = None
     format: Optional[str] = None
+    platform: Optional[str] = None
     files: List[YoutubeConvertFile] = Field(default_factory=list)

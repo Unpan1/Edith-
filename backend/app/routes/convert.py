@@ -86,6 +86,7 @@ def _run_convert(job_id: str, payload: dict) -> None:
             title=result.title,
             duration=result.duration,
             format=result.format,
+            platform=result.platform,
             files=files,
         )
     except JobCancelledError:
@@ -118,7 +119,8 @@ def _run_convert(job_id: str, payload: dict) -> None:
 
 @router.post("/youtube", response_model=YoutubeConvertJobStart, status_code=202)
 def start_youtube_convert(body: YoutubeConvertRequest):
-    YoutubeService(get_settings()).normalize_url(body.url)
+    """Descarga YouTube / Instagram / Facebook a MP4 y/o MP3."""
+    YoutubeService.normalize_media_url(body.url)
     job = progress_jobs.create(
         "convert",
         detail="En cola…",
@@ -151,6 +153,7 @@ def convert_job_status(job_id: str):
         title=meta.get("title"),
         duration=meta.get("duration"),
         format=meta.get("format"),
+        platform=meta.get("platform"),
         files=files,
     )
 

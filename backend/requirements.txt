@@ -22,7 +22,7 @@ bcrypt==4.2.1
 email-validator==2.2.0
 httpx==0.28.1
 tqdm==4.67.1
-yt-dlp>=2024.12.23
+yt-dlp>=2026.8.19
 edge-tts>=6.1.9
 Pillow>=10.4.0
 # torch: instalar aparte si hace falta:
